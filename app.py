@@ -183,7 +183,7 @@ def generate_contract():
                 io.BytesIO(pdf_bytes),
                 mimetype='application/pdf',
                 as_attachment=True,
-                download_name=f"Договор_{contract_number}.pdf"
+                download_name=f"Contract_{contract_number}.pdf"
             )
 
     except ValueError as e:
@@ -208,7 +208,7 @@ def generate_contract_docx():
                 io.BytesIO(docx_bytes),
                 mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                 as_attachment=True,
-                download_name=f"Договор_{contract_number}.docx"
+                download_name=f"Contract_{contract_number}.docx"
             )
 
     except ValueError as e:
