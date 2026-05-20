@@ -51,7 +51,8 @@ COMPANY = {
 @app.get('/')
 def root():
     return jsonify({"status": "ok", "service": "docx-parser",
-                    "endpoints": ["/health", "/extract", "/generate-contract"]})
+                    "endpoints": ["/health", "/extract",
+                                  "/generate-contract", "/generate-contract-docx"]})
 
 
 @app.get('/health')
@@ -129,73 +130,54 @@ def _convert_to_pdf(docx_path: Path, out_dir: Path) -> Path:
     return pdf_path
 
 
+def _render_contract(payload):
+    """
+    Общая часть для PDF/DOCX-эндпоинтов:
+    валидирует payload, рендерит docxtpl-шаблон,
+    возвращает (tmp_dir_obj, docx_path, contract_number).
+    """
+    contract_number = payload.get('contract_number')
+    contract_date   = payload.get('contract_date')
+    client          = payload.get('client') or {}
+
+    if not contract_number or not contract_date:
+        raise ValueError("contract_number и contract_date обязательны")
+    if not client.get('company_name'):
+        raise ValueError("client.company_name обязателен")
+
+    # Дефолты для опциональных полей
+    for k in ('inn','kpp','ogrn','address','account','bank','bik','cor_account',
+              'director_genitive','director_short'):
+        client.setdefault(k, '')
+
+    context = {
+        'contract_number': contract_number,
+        'contract_date':   contract_date,
+        'client':          client,
+        'company':         COMPANY,
+    }
+
+    tmp_dir = tempfile.TemporaryDirectory()
+    tmp = Path(tmp_dir.name)
+    docx_path = tmp / f"contract_{contract_number}.docx"
+    doc = DocxTemplate(TEMPLATE_PATH)
+    doc.render(context)
+    doc.save(docx_path)
+
+    return tmp_dir, docx_path, contract_number
+
+
 @app.post('/generate-contract')
 def generate_contract():
-    """
-    Принимает JSON:
-    {
-      "contract_number": "Б-260520-1430-8055160350",
-      "contract_date": "20 мая 2026",
-      "client": {
-        "company_name": "ООО «Кендалл»",
-        "inn": "5009134368",
-        "kpp": "500901001",
-        "ogrn": "1235000054321",
-        "address": "142702, Московская обл., г. Видное, ул. Заводская, д. 1",
-        "account": "40702810500000123456",
-        "bank": "ПАО Сбербанк",
-        "bik": "044525225",
-        "cor_account": "30101810400000000225",
-        "director_genitive": "Иванова Ивана Ивановича",
-        "director_short": "Иванов И.И."
-      }
-    }
-    Возвращает PDF (application/pdf).
-    """
+    """POST JSON → PDF (application/pdf). Принимает {contract_number, contract_date, client:{...}}."""
     try:
         payload = request.get_json(force=True, silent=True) or {}
+        tmp_dir, docx_path, contract_number = _render_contract(payload)
 
-        contract_number = payload.get('contract_number')
-        contract_date   = payload.get('contract_date')
-        client          = payload.get('client') or {}
-
-        if not contract_number or not contract_date:
-            return jsonify({"error": "contract_number и contract_date обязательны"}), 400
-        if not client.get('company_name'):
-            return jsonify({"error": "client.company_name обязателен"}), 400
-
-        # Дефолты для опциональных полей — чтобы шаблон не падал
-        client.setdefault('inn',               '')
-        client.setdefault('kpp',               '')
-        client.setdefault('ogrn',              '')
-        client.setdefault('address',           '')
-        client.setdefault('account',           '')
-        client.setdefault('bank',              '')
-        client.setdefault('bik',               '')
-        client.setdefault('cor_account',       '')
-        client.setdefault('director_genitive', '')
-        client.setdefault('director_short',    '')
-
-        context = {
-            'contract_number': contract_number,
-            'contract_date':   contract_date,
-            'client':          client,
-            'company':         COMPANY,
-        }
-
-        log.info(f"Generating contract {contract_number} for {client['company_name']}")
-
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp = Path(tmp)
-            docx_path = tmp / f"contract_{contract_number}.docx"
-            doc = DocxTemplate(TEMPLATE_PATH)
-            doc.render(context)
-            doc.save(docx_path)
-
-            pdf_path = _convert_to_pdf(docx_path, tmp)
-
+        with tmp_dir:
+            pdf_path  = _convert_to_pdf(docx_path, Path(tmp_dir.name))
             pdf_bytes = pdf_path.read_bytes()
-            log.info(f"Generated PDF {pdf_path.name} ({len(pdf_bytes)} bytes)")
+            log.info(f"Generated PDF for {contract_number} ({len(pdf_bytes)} bytes)")
 
             return send_file(
                 io.BytesIO(pdf_bytes),
@@ -204,8 +186,35 @@ def generate_contract():
                 download_name=f"Договор_{contract_number}.pdf"
             )
 
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        log.error(f"Generate error: {e}", exc_info=True)
+        log.error(f"Generate PDF error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.post('/generate-contract-docx')
+def generate_contract_docx():
+    """POST JSON → DOCX. Тот же контракт, но возвращается .docx без конвертации в PDF."""
+    try:
+        payload = request.get_json(force=True, silent=True) or {}
+        tmp_dir, docx_path, contract_number = _render_contract(payload)
+
+        with tmp_dir:
+            docx_bytes = docx_path.read_bytes()
+            log.info(f"Generated DOCX for {contract_number} ({len(docx_bytes)} bytes)")
+
+            return send_file(
+                io.BytesIO(docx_bytes),
+                mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                as_attachment=True,
+                download_name=f"Договор_{contract_number}.docx"
+            )
+
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        log.error(f"Generate DOCX error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 
