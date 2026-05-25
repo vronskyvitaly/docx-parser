@@ -1,0 +1,30 @@
+name: Build base image (LibreOffice)
+
+on:
+  workflow_dispatch:   # запускается вручную один раз
+  push:
+    paths:
+      - Dockerfile.base  # или при изменении базового образа
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push base image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.base
+          push: true
+          tags: ghcr.io/vronskyvitaly/docx-parser-base:latest
