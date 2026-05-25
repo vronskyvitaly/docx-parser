@@ -5,6 +5,21 @@ services:
     restart: unless-stopped
     ports:
       - "8082:8082"
+    environment:
+      NIXPACKS_NODE_VERSION: "22"
+      ROYAL_NAME: "ООО «Роял Карго»"
+      ROYAL_INN: "5009140724"
+      ROYAL_KPP: "500901001"
+      ROYAL_OGRN: "1245000101280"
+      ROYAL_ADDRESS: "Россия, 142007, Московская область, г. Домодедово, ул. Ильюшина, стр. 2А, пом. 75"
+      ROYAL_ACCOUNT: "40702810101300047612"
+      ROYAL_BANK: "АО «АЛЬФА-БАНК»"
+      ROYAL_BIK: "044525593"
+      ROYAL_COR_ACCOUNT: "30101810200000000593"
+      ROYAL_DIRECTOR_GEN: "Москалевой Елены Хайриловны"
+      ROYAL_DIRECTOR_SHORT: "Москалева Е.Х."
+      ROYAL_EMAIL: "cargo@tamozhennyy.broker"
+      ROYAL_PHONE: "ЗАМЕНИТЬ"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/health')"]
       interval: 30s
