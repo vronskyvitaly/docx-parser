@@ -147,7 +147,7 @@ def _render_contract(payload):
 
     # Дефолты для опциональных полей
     for k in ('inn','kpp','ogrn','address','account','bank','bik','cor_account',
-              'director_genitive','director_short'):
+              'director_genitive','director_short','email','phone'):
         client.setdefault(k, '')
 
     context = {
