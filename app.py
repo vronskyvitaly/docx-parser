@@ -40,7 +40,7 @@ COMPANY = {
     'director_genitive': os.environ.get('ROYAL_DIRECTOR_GEN',  'Директора Директора Директоровича'),
     'director_short':    os.environ.get('ROYAL_DIRECTOR_SHORT','Директоров Д.Д.'),
     'email':             os.environ.get('ROYAL_EMAIL',         'cargo@tamozhennyy.broker'),
-    'phone':             os.environ.get('ROYAL_PHONE',         '+7 (495) 000-00-00'),
+    'phone':             os.environ.get('ROYAL_PHONE',         '+7 (495) 128-25-35'),
 }
 
 
