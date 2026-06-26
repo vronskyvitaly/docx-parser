@@ -1,19 +1,52 @@
 # docx-parser
 
-Маленький HTTP-сервис для извлечения текста из `.docx` файлов. Сделан для использования с n8n (или любой другой автоматизацией) — принимает POST с файлом, возвращает JSON с текстом.
+Лёгкий HTTP-микросервис для работы с документами Word в пайплайне таможенного брокера. Принимает DOCX-файлы с реквизитами клиентов, извлекает текст для дальнейшего парсинга ИИ, а также генерирует готовые договоры (PDF и DOCX) по шаблону с реквизитами компании.
 
-## Эндпоинты
+Разворачивается в Docker, деплоится через Coolify — автоматически при пуше в `main`.
 
-- `GET /health` — проверка живости, возвращает `{"status": "ok"}`.
-- `POST /extract` — принимает DOCX, возвращает текст.
+---
 
-### Пример запроса
+## Возможности
+
+| Эндпоинт | Метод | Что делает |
+|---|---|---|
+| `/health` | GET | Проверка живости сервиса |
+| `/extract` | POST | Извлекает текст из DOCX, возвращает JSON |
+| `/generate-contract` | POST | Рендерит договор по шаблону → возвращает PDF |
+| `/generate-contract-docx` | POST | То же самое → возвращает DOCX |
+
+---
+
+## Быстрый старт
+
+### Локально
+
+```bash
+pip install -r requirements.txt
+python app.py
+# Сервис доступен на http://localhost:8082
+```
+
+### Docker
+
+```bash
+docker build -t docx-parser .
+docker run -d -p 8082:8082 --restart unless-stopped docx-parser
+```
+
+---
+
+## API
+
+### POST /extract
+
+Принимает DOCX-файл, возвращает извлечённый текст.
 
 ```bash
 curl -X POST -F "file=@card.docx" http://localhost:8082/extract
 ```
 
-Альтернатива — отправить файл как raw body:
+Или как raw body:
 
 ```bash
 curl -X POST --data-binary @card.docx \
@@ -21,115 +54,114 @@ curl -X POST --data-binary @card.docx \
   http://localhost:8082/extract
 ```
 
-### Пример ответа
+**Ответ:**
 
 ```json
 {
-  "text": "ООО «Кендалл»\nИНН 5009134368\nКПП 500901001\n...",
+  "text": "ООО «Омега»\nИНН 7718100830\nКПП 772001001\n...",
   "chars": 1234,
   "paragraphs": 25,
   "tables": 1
 }
 ```
 
-В случае ошибки:
+---
+
+### POST /generate-contract
+
+Рендерит договор на оказание услуг таможенного представителя по шаблону `templates/contract.docx`.
+
+**Запрос (JSON):**
 
 ```json
-{"error": "описание"}
+{
+  "contract_number": "415",
+  "contract_date": "26.06.2026",
+  "client": {
+    "company_name": "ООО «Омега»",
+    "inn": "7718100830",
+    "kpp": "772001001",
+    "ogrn": "1157746208729",
+    "address": "111123, Москва, ш. Энтузиастов, д. 31",
+    "account": "40702810413000010925",
+    "bank": "ПАО Сбербанк",
+    "bik": "042007681",
+    "cor_account": "30101810600000000681",
+    "director_genitive": "Елютина Ивана Михайловича",
+    "director_short": "Елютин И.М.",
+    "intro_clause": ", в лице генерального директора Елютина Ивана Михайловича, действующего на основании Устава",
+    "email": "client@example.com",
+    "phone": "+7 903 030 99 94"
+  }
+}
 ```
 
-(HTTP 400 для проблем с файлом, 500 — внутренние ошибки.)
+**Ответ:** бинарный PDF (`application/pdf`) с именем `Contract_415.pdf`.
 
-## Локальный запуск
+Эндпоинт `/generate-contract-docx` принимает тот же JSON, возвращает `.docx`.
+
+---
+
+## Реквизиты компании
+
+Реквизиты Представителя задаются через переменные окружения в Coolify — не хардкодятся в образе:
+
+| Переменная | Описание |
+|---|---|
+| `ROYAL_NAME` | Название компании |
+| `ROYAL_INN` | ИНН |
+| `ROYAL_KPP` | КПП |
+| `ROYAL_OGRN` | ОГРН |
+| `ROYAL_ADDRESS` | Юридический адрес |
+| `ROYAL_ACCOUNT` | Расчётный счёт |
+| `ROYAL_BANK` | Банк |
+| `ROYAL_BIK` | БИК |
+| `ROYAL_COR_ACCOUNT` | Корр. счёт |
+| `ROYAL_DIRECTOR_GEN` | ФИО директора в род. падеже |
+| `ROYAL_DIRECTOR_SHORT` | ФИО кратко (Фамилия И.О.) |
+| `ROYAL_EMAIL` | Email компании |
+| `ROYAL_PHONE` | Телефон (п. 2.4.1 договора) |
+
+---
+
+## Деплой в Coolify
+
+1. Подключите репозиторий в Coolify → **Build Pack: Dockerfile**.
+2. Укажите **Port: 8082**.
+3. Заполните переменные окружения (реквизиты компании).
+4. Нажмите **Deploy** — при каждом пуше в `main` Coolify пересобирает образ автоматически.
+
+**Проверка после деплоя:**
 
 ```bash
-pip install -r requirements.txt
-python app.py
+curl https://parser.yourdomain.ru/health
+# {"status": "ok"}
 ```
 
-Сервис стартует на `http://0.0.0.0:8082`.
-
-## Docker
-
-```bash
-docker build -t docx-parser .
-docker run -d --name docx-parser -p 8082:8082 --restart unless-stopped docx-parser
-```
-
-## Деплой в Coolify (через GitHub)
-
-1. Создайте репозиторий на GitHub и положите туда содержимое этой папки.
-
-2. В Coolify откройте проект, где живёт n8n → **+ New Resource** → **Public Repository** (или **Private Repository** + Deploy Key).
-
-3. Заполните:
-   - **Repository URL** — ваш GitHub URL.
-   - **Branch** — `main` (или `master`).
-   - **Build Pack** — **Dockerfile**.
-   - **Port (exposed)** — `8082`.
-
-4. **Important — Network:** чтобы n8n мог достучаться до сервиса по имени `docx-parser`, оба контейнера должны быть в одной Docker-сети.
-   - Создайте сервис в **том же Coolify-проекте**, что n8n — Coolify их сам поместит в общую сеть проекта.
-   - В настройках сервиса убедитесь, что **Container Name** = `docx-parser` (это имя, по которому n8n будет обращаться).
-
-5. **Deploy.** Coolify соберёт образ из Dockerfile и запустит контейнер.
-
-6. **Проверка из n8n:** в Terminal контейнера n8n:
-
-   ```bash
-   wget -O- http://docx-parser:8082/health
-   ```
-
-   Должно вернуть `{"status": "ok"}`.
-
-7. **Проверка с хоста:**
-
-   ```bash
-   curl http://localhost:8082/health
-   ```
-
-   (Coolify по умолчанию мапит порт на хост.)
-
-## Использование из n8n
-
-В HTTP Request ноде:
-
-| Поле | Значение |
-|------|----------|
-| Method | `POST` |
-| URL | `http://docx-parser:8082/extract` |
-| Send Body | ✅ |
-| Body Content Type | `Form-Data Multipart` |
-| Body Parameters | `file` (Binary Data) ← из предыдущей ноды |
-
-Ответ:
-
-```json
-{ "text": "..." }
-```
-
-Текст в JSON-ответе доступен как `$json.text`.
-
-## Лимиты и производительность
-
-- В Dockerfile используется gunicorn с 2 воркерами × 4 потока — хватает на ~8 параллельных запросов.
-- Timeout одного запроса — 120 секунд (для крупных DOCX).
-- Максимальный размер файла — по умолчанию неограниченно, ограничивайте на стороне n8n или nginx.
-- Чистая память ~80 MB.
-
-## Безопасность
-
-⚠️ Сервис не имеет аутентификации. Если контейнер торчит в интернет — закройте его за reverse-proxy с Basic Auth, или ограничьте доступ только из сети Coolify.
-
-В нашей конфигурации он живёт **внутри Docker-сети** и не выставлен наружу — это безопасно.
+---
 
 ## Стек
 
-- Python 3.12
-- Flask 3.0
-- python-docx 1.1
-- gunicorn 23.0
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-3.0-000000?logo=flask)
+![Docker](https://img.shields.io/badge/Docker-Dockerfile-2496ED?logo=docker&logoColor=white)
+![LibreOffice](https://img.shields.io/badge/LibreOffice-headless-18A303?logo=libreoffice)
+![Coolify](https://img.shields.io/badge/Coolify-self--hosted-7C3AED)
+
+- **Flask 3.0** — HTTP-сервер
+- **python-docx** — извлечение текста из DOCX
+- **docxtpl** — рендеринг договора по Jinja2-шаблону
+- **LibreOffice headless** — конвертация DOCX → PDF
+- **gunicorn** — production WSGI-сервер (2 воркера × 4 потока)
+
+---
+
+## Безопасность
+
+Сервис не имеет аутентификации — он живёт внутри закрытой Docker-сети Coolify и не выставлен напрямую в интернет. Если вы открываете порт наружу — закройте его Basic Auth на уровне reverse-proxy.
+
+---
 
 ## Лицензия
 
-MIT.
+MIT
