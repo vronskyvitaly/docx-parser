@@ -29,6 +29,7 @@ TEMPLATE_PATH = os.environ.get(
 # Дефолты — заглушки, ОБЯЗАТЕЛЬНО заменить на реальные перед прод-использованием.
 COMPANY = {
     'name':              os.environ.get('ROYAL_NAME',          'ООО «Роял Карго»'),
+    'name_full':         os.environ.get('ROYAL_NAME_FULL',     'Общество с ограниченной ответственностью «Роял Карго»'),
     'inn':               os.environ.get('ROYAL_INN',           '0000000000'),
     'kpp':               os.environ.get('ROYAL_KPP',           '000000000'),
     'ogrn':              os.environ.get('ROYAL_OGRN',          '0000000000000'),
